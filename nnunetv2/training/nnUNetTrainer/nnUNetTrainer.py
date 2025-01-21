@@ -141,7 +141,9 @@ class nnUNetTrainer(object):
         # print what device we are using
         if self.is_ddp:  # implicitly it's clear that we use cuda in this case
             print(
-                f"I am local rank {self.local_rank}. {device_count()} GPUs are available. The world size is "
+                f"I am local rank {self.local_rank}. {
+                    device_count()
+                } GPUs are available. The world size is "
                 f"{dist.get_world_size()}."
                 f"Setting device to {self.device}"
             )
@@ -159,7 +161,7 @@ class nnUNetTrainer(object):
         for k in inspect.signature(self.__init__).parameters.keys():
             self.my_init_kwargs[k] = locals()[k]
 
-        ###  Saving all the init args into class variables for later access
+        # Saving all the init args into class variables for later access
         self.plans_manager = PlansManager(plans)
         self.configuration_manager = self.plans_manager.get_configuration(configuration)
         self.configuration_name = configuration
@@ -167,7 +169,7 @@ class nnUNetTrainer(object):
         self.fold = fold
         self.unpack_dataset = unpack_dataset
 
-        ### Setting all the folder names. We need to make sure things don't crash in case we are just running
+        # Setting all the folder names. We need to make sure things don't crash in case we are just running
         # inference and some of the folders may not be defined!
         self.preprocessed_dataset_folder_base = (
             join(nnUNet_preprocessed, self.plans_manager.dataset_name)
@@ -214,7 +216,7 @@ class nnUNetTrainer(object):
             else None
         )
 
-        ### Some hyperparameters for you to fiddle with
+        # Some hyperparameters for you to fiddle with
         self.initial_lr = 1e-2
         self.weight_decay = 3e-5
         self.oversample_foreground_percent = 0.33
@@ -224,7 +226,7 @@ class nnUNetTrainer(object):
         self.current_epoch = 0
         self.enable_deep_supervision = True
 
-        ### Dealing with labels/regions
+        # Dealing with labels/regions
         self.label_manager = self.plans_manager.get_label_manager(dataset_json)
         # labels can either be a list of int (regular training) or a list of tuples of int (region-based training)
         # needed for predictions. We do sigmoid in case of (overlapping) regions
@@ -235,7 +237,7 @@ class nnUNetTrainer(object):
         self.grad_scaler = GradScaler() if self.device.type == "cuda" else None
         self.loss = None  # -> self.initialize
 
-        ### Simple logging. Don't take that away from me!
+        # Simple logging. Don't take that away from me!
         # initialize log file. This is just our log for the print statements etc. Not to be confused with lightning
         # logging
         timestamp = datetime.now()
@@ -254,21 +256,21 @@ class nnUNetTrainer(object):
         )
         self.logger = nnUNetLogger()
 
-        ### placeholders
+        # placeholders
         self.dataloader_train = self.dataloader_val = None  # see on_train_start
 
-        ### initializing stuff for remembering things and such
+        # initializing stuff for remembering things and such
         self._best_ema = None
 
-        ### inference things
+        # inference things
         self.inference_allowed_mirroring_axes = None  # this variable is set in
         # self.configure_rotation_dummyDA_mirroring_and_inital_patch_size and will be saved in checkpoints
 
-        ### checkpoint saving stuff
+        # checkpoint saving stuff
         self.save_every = 50
         self.disable_checkpointing = False
 
-        ## DDP batch size and oversampling can differ between workers and needs adaptation
+        # DDP batch size and oversampling can differ between workers and needs adaptation
         # we need to change the batch size in DDP because we don't use any of those distributed samplers
         self._set_batch_size_and_oversample()
 
@@ -963,11 +965,12 @@ class nnUNetTrainer(object):
         else:
             patch_size_spatial = patch_size
             ignore_axes = None
+        random_crop = getattr(self, "data_augmentation_random_crop", False)
         transforms.append(
             SpatialTransform(
                 patch_size_spatial,
                 patch_center_dist_from_border=0,
-                random_crop=False,
+                random_crop=random_crop,
                 p_elastic_deform=0,
                 p_rotation=0.2,
                 rotation=rotation_for_DA,
@@ -1075,9 +1078,9 @@ class nnUNetTrainer(object):
 
         transforms.append(RemoveLabelTansform(-1, 0))
         if is_cascaded:
-            assert (
-                foreground_labels is not None
-            ), "We need foreground_labels for cascade augmentations"
+            assert foreground_labels is not None, (
+                "We need foreground_labels for cascade augmentations"
+            )
             transforms.append(
                 MoveSegAsOneHotToDataTransform(
                     source_channel_idx=1,
@@ -1125,8 +1128,8 @@ class nnUNetTrainer(object):
 
         return ComposeTransforms(transforms)
 
+    @staticmethod
     def get_validation_transforms(
-        self,
         deep_supervision_scales: Union[List, Tuple, None],
         is_cascaded: bool = False,
         foreground_labels: Union[Tuple[int, ...], List[int]] = None,
@@ -1271,7 +1274,9 @@ class nnUNetTrainer(object):
         self.print_to_log_file("")
         self.print_to_log_file(f"Epoch {self.current_epoch}")
         self.print_to_log_file(
-            f"Current learning rate: {np.round(self.optimizer.param_groups[0]['lr'], decimals=5)}"
+            f"Current learning rate: {
+                np.round(self.optimizer.param_groups[0]['lr'], decimals=5)
+            }"
         )
         # lrs are the same for all workers so we don't need to gather them in case of DDP training
         self.logger.log("lrs", self.optimizer.param_groups[0]["lr"], self.current_epoch)
@@ -1291,9 +1296,11 @@ class nnUNetTrainer(object):
         # If the device_type is 'cpu' then it's slow as heck and needs to be disabled.
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
-        with autocast(
-            self.device.type, enabled=True
-        ) if self.device.type == "cuda" else dummy_context():
+        with (
+            autocast(self.device.type, enabled=True)
+            if self.device.type == "cuda"
+            else dummy_context()
+        ):
             output = self.network(data)
             # del data
             l = self.loss(output, target)
@@ -1339,9 +1346,11 @@ class nnUNetTrainer(object):
         # If the device_type is 'cpu' then it's slow as heck and needs to be disabled.
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
-        with autocast(
-            self.device.type, enabled=True
-        ) if self.device.type == "cuda" else dummy_context():
+        with (
+            autocast(self.device.type, enabled=True)
+            if self.device.type == "cuda"
+            else dummy_context()
+        ):
             output = self.network(data)
             del data
             l = self.loss(output, target)
@@ -1464,7 +1473,13 @@ class nnUNetTrainer(object):
             ],
         )
         self.print_to_log_file(
-            f"Epoch time: {np.round(self.logger.my_fantastic_logging['epoch_end_timestamps'][-1] - self.logger.my_fantastic_logging['epoch_start_timestamps'][-1], decimals=2)} s"
+            f"Epoch time: {
+                np.round(
+                    self.logger.my_fantastic_logging['epoch_end_timestamps'][-1]
+                    - self.logger.my_fantastic_logging['epoch_start_timestamps'][-1],
+                    decimals=2,
+                )
+            } s"
         )
 
         # handling periodic checkpointing
@@ -1481,7 +1496,9 @@ class nnUNetTrainer(object):
         ):
             self._best_ema = self.logger.my_fantastic_logging["ema_fg_dice"][-1]
             self.print_to_log_file(
-                f"Yayy! New best EMA pseudo Dice: {np.round(self._best_ema, decimals=4)}"
+                f"Yayy! New best EMA pseudo Dice: {
+                    np.round(self._best_ema, decimals=4)
+                }"
             )
             self.save_checkpoint(join(self.output_folder, "checkpoint_best.pth"))
 
@@ -1722,7 +1739,9 @@ class nnUNetTrainer(object):
                             d, s, p = tmp.load_case(k)
                         except FileNotFoundError:
                             self.print_to_log_file(
-                                f"Predicting next stage {n} failed for case {k} because the preprocessed file is missing! "
+                                f"Predicting next stage {n} failed for case {
+                                    k
+                                } because the preprocessed file is missing! "
                                 f"Run the preprocessing for this configuration first!"
                             )
                             continue

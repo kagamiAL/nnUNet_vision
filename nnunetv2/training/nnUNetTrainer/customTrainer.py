@@ -5,6 +5,8 @@ from batchgenerators.utilities.file_and_folder_operations import join
 
 
 class CustomTrainer(nnUNetTrainer):
+    data_augmentation_random_crop: bool = False
+
     def __init__(
         self,
         plans: dict,
